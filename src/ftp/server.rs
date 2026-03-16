@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
@@ -34,8 +36,8 @@ impl FtpManager {
         }
     }
 
-     /// 启动 FTP 服务器（单用户：仅接受指定的用户名和密码，禁止匿名）
-     pub async fn start(
+    /// 启动 FTP 服务器（单用户：仅接受指定的用户名和密码，禁止匿名）
+    pub async fn start(
         &self,
         port: u16,
         root_dir: String,
@@ -48,6 +50,19 @@ impl FtpManager {
         }
 
         let root_path = PathBuf::from(&root_dir);
+        if !root_path.exists() {
+            return Err(format!("根目录不存在: {}", root_dir));
+        }
+        if !root_path.is_dir() {
+            return Err(format!("根目录不是文件夹: {}", root_dir));
+        }
+
+        let addr = format!("0.0.0.0:{}", port);
+        let _probe = TcpListener::bind(&addr)
+            .await
+            .map_err(|e| format!("端口 {} 无法绑定（可能被占用）: {}", port, e))?;
+        drop(_probe);
+
         let sbe_generator: Box<dyn Fn() -> Filesystem + Send + Sync> =
             Box::new(move || Filesystem::new(root_path.clone()));
         let authenticator: Arc<dyn libunftp::auth::Authenticator<DefaultUser> + Send + Sync> =
@@ -56,18 +71,23 @@ impl FtpManager {
                 password: password.clone(),
             });
 
-            let server = ServerBuilder::with_authenticator(sbe_generator, authenticator)
+        let server = ServerBuilder::with_authenticator(sbe_generator, authenticator)
             .greeting("Welcome to Ferry FTP Server")
             .passive_ports(50000..65535)
             .build()
             .map_err(|e| e.to_string())?;
 
-        let addr = format!("0.0.0.0:{}", port);
         let handle = tokio::spawn(async move {
             if let Err(e) = server.listen(&addr).await {
                 log::error!("FTP server listen error: {}", e);
             }
         });
+
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        if let Err(e) = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)).await {
+            handle.abort();
+            return Err(format!("FTP 服务启动失败: {}", e));
+        }
 
         state.handle = Some(handle);
         state.running = true;

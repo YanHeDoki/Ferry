@@ -1,4 +1,8 @@
 <resources>
     <string name="app_name">ferry</string>
     <string name="main_activity_title">ferry</string>
+    <string name="ftp_notification_channel_name">FTP 服务</string>
+    <string name="ftp_notification_channel_desc">Ferry FTP 服务器运行中时显示</string>
+    <string name="ftp_notification_title">Ferry FTP</string>
+    <string name="ftp_notification_text">FTP 服务器运行中 · 点击返回</string>
 </resources>
