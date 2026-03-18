@@ -57,6 +57,19 @@ impl FtpManager {
             return Err(format!("根目录不是文件夹: {}", root_dir));
         }
 
+        let probe_file = root_path.join(".ferry_write_probe");
+        match std::fs::write(&probe_file, b"probe") {
+            Ok(_) => {
+                let _ = std::fs::remove_file(&probe_file);
+            }
+            Err(e) => {
+                return Err(format!(
+                    "根目录无写入权限: {}（请在系统设置中授予「所有文件访问」权限）\n错误: {}",
+                    root_dir, e
+                ));
+            }
+        }
+
         let addr = format!("0.0.0.0:{}", port);
         let _probe = TcpListener::bind(&addr)
             .await
